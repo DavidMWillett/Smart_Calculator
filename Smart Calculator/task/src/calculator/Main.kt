@@ -1,5 +1,7 @@
 package calculator
 
+import kotlin.math.pow
+
 fun String.isCommand() = this.first() == '/'
 
 fun main() {
@@ -33,11 +35,10 @@ object Calculator {
         }
     }
 
-    fun parseStatement(statement: String) {
+    fun parseStatement(input: String) {
         try {
-            val lexer = Lexer(statement)
-            val parser = Parser(lexer)
-            val result = parser.evaluate()
+            val statement = Statement(input)
+            val result = statement.execute()
             if (result != null) println(result)
         } catch (e: InvalidExpressionException) {
             println("Invalid expression")
@@ -51,172 +52,232 @@ object Calculator {
     }
 }
 
-class Lexer(text: String) {
-    val iterator = text.toList().listIterator()
+class Statement(text: String) {
+    private val tokens = Tokenizer.scan(text)
 
-    fun scan(): List<Token> {
-        val tokens = mutableListOf<Token>()
-        loop@ while (iterator.hasNext()) {
-            val character = iterator.next()
-            when {
-                character.isWhitespace() -> continue@loop
-                character.isDigit() -> tokens.add(NumberToken(number(character)))
-                character.isLetter() -> tokens.add(VariableToken(variable(character)))
-                character == '=' -> tokens.add(AssignToken())
-                character == '+' -> tokens.add(ArithmeticOperatorToken(ArithmeticOperator.PLUS))
-                character == '-' -> tokens.add(ArithmeticOperatorToken(ArithmeticOperator.MINUS))
-                else -> throw InvalidExpressionException()
-            }
+    /**
+     * Executes the statement, returning an integer if the statement is an expression, otherwise null.
+     * Throws the appropriate exception if an error is detected.
+     */
+    fun execute(): Int? {
+        return if (tokens.any { it is Token.Symbol && it.char == '=' }) {
+            val assignment = Assignment(tokens)
+            assignment.execute()
+            null
+        } else {
+            val expression = Expression(tokens)
+            expression.evaluate()
         }
-        return tokens
     }
-
-    private fun number(firstDigit: Char): Int {
-        var result = firstDigit.toString()
-        while (iterator.hasNext()) {
-            val character = iterator.next()
-            if (character.isDigit()) {
-                result += character
-            } else {
-                iterator.previous()
-                break
-            }
-        }
-        return result.toInt()
-    }
-
-    private fun variable(firstLetter: Char): String {
-        var result = firstLetter.toString()
-        while (iterator.hasNext()) {
-            val character = iterator.next()
-            if (character.isLetter()) {
-                result += character
-            } else {
-                iterator.previous()
-                break
-            }
-        }
-        return result
-    }
-
-    class NumberToken(val value: Int) : Token()
-
-    class VariableToken(val value: String) : Token()
-
-    class ArithmeticOperatorToken(val operator: ArithmeticOperator) : Token()
-
-    class AssignToken : Token()
-
-    abstract class Token
 }
 
-/**
- * Grammar:
- *
- * statement: assignment | expression
- * assignment: variable "=" expression
- * expression: factor (("+" | "-") factor)*
- * factor: ("+" | "-") factor | number | variable
- */
+class Assignment(private val tokens: List<Token>) {
 
-class Parser(lexer: Lexer) {
-    private val tokens = lexer.scan()
-    val iterator = tokens.iterator()
-
-    fun evaluate(): Int? {
-        val tree = if (tokens.any { it is Lexer.AssignToken }) assign() else expr()
-        return tree.evaluate()
+    fun execute() {
+        if (tokens.size != 3) throw InvalidAssignmentException()
+        val identifier = tokens.component1()
+        if (identifier !is Token.Identifier) throw InvalidAssignmentException()
+        val assignment = tokens.component2()
+        if (assignment !is Token.Symbol || assignment.char != '=') throw InvalidAssignmentException()
+        val number = tokens.component3()
+        if (number !is Token.Integer) throw InvalidAssignmentException()
+        Calculator.variables[identifier.name] = number.value
+        return
     }
+}
 
-    private fun assign(): Node {
-        val variableToken = iterator.next()
-        if (variableToken !is Lexer.VariableToken) throw InvalidIdentifierException()
-        val assignToken = iterator.next()
-        if (assignToken !is Lexer.AssignToken) throw InvalidIdentifierException()
-        try {
-            return AssignNode(VariableNode(variableToken.value), expr())
-        } catch (e: InvalidExpressionException ) {
-            throw InvalidAssignmentException()
-        }
-    }
+class Expression(tokens: List<Token>) {
+    private val elements = parse(tokens)
+    private var parenthesisCount = 0
 
-    private fun expr(): Node {
-        var node = factor()
-        while (iterator.hasNext()) {
-            val token = iterator.next()
-            if (token is Lexer.ArithmeticOperatorToken) {
-                node = BinaryArithmeticOperatorNode(token.operator, node, factor())
-            } else {
-                throw InvalidExpressionException()
+    private fun parse(tokens: List<Token>): List<Element> {
+        val tokenIterator = tokens.listIterator()
+        val elements = mutableListOf<Element>()
+        var lastToken: Token? = null
+        while (tokenIterator.hasNext()) {
+            val token = tokenIterator.next()
+            val thisElement = when (token) {
+                is Token.Integer -> Number(token.value)
+                is Token.Identifier -> Variable(token.name)
+                is Token.Symbol -> symbol(token.char, lastToken)
             }
+            elements.add(thisElement)
+            lastToken = token
         }
-        return node
+        if (parenthesisCount != 0) throw InvalidExpressionException()
+        return elements
     }
 
-    private fun factor(): Node {
-        return when (val token = iterator.next()) {
-            is Lexer.NumberToken -> NumberNode(token.value)
-            is Lexer.VariableToken -> VariableNode(token.value)
-            is Lexer.ArithmeticOperatorToken -> UnaryArithmeticOperatorNode(token.operator, factor())
+    private fun symbol(symbol: Char, lastToken: Token?): Element {
+        val isBinary = lastToken is Token.Integer || lastToken is Token.Identifier ||
+                lastToken is Token.Symbol && lastToken.char == ')'
+        return when (symbol) {
+            '+' -> if (isBinary) BinaryPlusOperator() else UnaryPlusOperator()
+            '-' -> if (isBinary) BinaryMinusOperator() else UnaryMinusOperator()
+            '*' -> if (isBinary) TimesOperator() else throw InvalidExpressionException()
+            '/' -> if (isBinary) DivOperator() else throw InvalidExpressionException()
+            '^' -> if (isBinary) PowerOperator() else throw InvalidExpressionException()
+            '(' -> { parenthesisCount++; LeftParenthesis() }
+            ')' -> { parenthesisCount--; RightParenthesis() }
             else -> throw InvalidExpressionException()
         }
     }
-}
 
-class NumberNode(private val value: Int) : Node {
-    override fun evaluate(): Int {
-        return value
+    fun evaluate(): Int {
+        val postfixTokens = RPNConverter.convert(elements)
+        return RPNCalculator.calculate(postfixTokens)
     }
 }
 
-class VariableNode(val name: String) : Node {
-    override fun evaluate(): Int {
-        val value = Calculator.variables[name]
-        return value ?: throw UnknownVariableException()
+object RPNConverter {
+    private val postfixTokens = mutableListOf<Element>()
+    private val operatorStack = MutableStack<Operator>()
+
+    fun convert(infixElements: List<Element>): List<Element> {
+        postfixTokens.clear()
+        operatorStack.clear()
+        scanInfix(infixElements)
+        emptyOperatorStack()
+        return postfixTokens
     }
-}
 
-class AssignNode(left: Node, right: Node) : BinaryNode(left, right) {
-    override fun evaluate(): Int? {
-        if (left !is VariableNode) throw InvalidIdentifierException()
-        val rightValue = right.evaluate() ?: throw InvalidAssignmentException()
-        Calculator.variables[left.name] = rightValue
-        return null
+    private fun scanInfix(infixElements: List<Element>) {
+        infixElements.forEach {
+            when (it) {
+                is Operand -> postfixTokens += it
+                is ArithmeticOperator -> processOperator(it)
+                is LeftParenthesis -> operatorStack.push(it)
+                is RightParenthesis -> {
+                    while (operatorStack.peek() !is LeftParenthesis) {
+                        postfixTokens += operatorStack.pop()
+                    }
+                    operatorStack.pop()
+                }
+            }
+        }
     }
-}
 
-class BinaryArithmeticOperatorNode(private val operator: ArithmeticOperator, left: Node, right: Node)
-    : BinaryNode(left, right) {
+    private fun processOperator(op: ArithmeticOperator) {
+        loop@ while (!operatorStack.isEmpty()) {
+            when (val topOfStack = operatorStack.peek()) {
+                is LeftParenthesis -> break@loop
+                is ArithmeticOperator -> {
+                    if (op.precedence <= topOfStack.precedence) {
+                        postfixTokens += operatorStack.pop()
+                    } else {
+                        break@loop
+                    }
+                }
+            }
+        }
+        operatorStack.push(op)
+    }
 
-    override fun evaluate(): Int? {
-        val leftValue = left.evaluate() ?: throw InvalidExpressionException()
-        val rightValue = right.evaluate() ?: throw InvalidExpressionException()
-        return when (operator) {
-            ArithmeticOperator.PLUS -> leftValue + rightValue
-            ArithmeticOperator.MINUS -> leftValue - rightValue
+    private fun emptyOperatorStack() {
+        while (!operatorStack.isEmpty()) {
+            if (operatorStack.peek() is Parenthesis) {
+                throw InvalidExpressionException()
+            } else {
+                postfixTokens += operatorStack.pop()
+            }
         }
     }
 }
 
-class UnaryArithmeticOperatorNode(private val operator: ArithmeticOperator, private val operand: Node) : Node {
-    override fun evaluate(): Int? {
-        val operandValue = operand.evaluate() ?: throw InvalidExpressionException()
-        return when (operator) {
-            ArithmeticOperator.PLUS -> operandValue
-            ArithmeticOperator.MINUS -> -operandValue
+object RPNCalculator {
+    fun calculate(postfixElements: List<Element>): Int {
+        val operandStack = MutableStack<Operand>()
+        postfixElements.forEach {
+            when (it) {
+                is Operand -> operandStack.push(it)
+                is ArithmeticOperator -> it.apply(operandStack)
+            }
         }
+        return operandStack.pop().value
     }
 }
 
-abstract class BinaryNode(val left: Node, val right: Node) : Node
-
-interface Node {
-    fun evaluate(): Int?
+class BinaryPlusOperator : BinaryOperator(precedence = 1) {
+    override fun execute(op1: Int, op2: Int) = op1 + op2
 }
 
-enum class ArithmeticOperator { PLUS, MINUS }
+class BinaryMinusOperator : BinaryOperator(precedence = 1) {
+    override fun execute(op1: Int, op2: Int) = op1 - op2
+}
+
+class TimesOperator : BinaryOperator(precedence = 2) {
+    override fun execute(op1: Int, op2: Int) = op1 * op2
+}
+
+class DivOperator : BinaryOperator(precedence = 2) {
+    override fun execute(op1: Int, op2: Int) = op1 / op2
+}
+
+class PowerOperator : BinaryOperator(precedence = 3) {
+    override fun execute(op1: Int, op2: Int) = op1.toDouble().pow(op2).toInt()
+}
+
+abstract class BinaryOperator(precedence: Int) : ArithmeticOperator(precedence) {
+    override fun apply(stack: MutableStack<Operand>) {
+        val op2 = stack.pop()
+        val op1 = stack.pop()
+        stack.push(Number(execute(op1.value, op2.value)))
+    }
+    abstract fun execute(op1: Int, op2: Int): Int
+}
+
+class UnaryPlusOperator : UnaryOperator(precedence = 3) {
+    override fun execute(op: Int) = op
+}
+
+class UnaryMinusOperator : UnaryOperator(precedence = 3) {
+    override fun execute(op: Int) = -op
+}
+
+abstract class UnaryOperator(precedence: Int) : ArithmeticOperator(precedence) {
+    override fun apply(stack: MutableStack<Operand>) {
+        val op = stack.pop()
+        stack.push(Number(execute(op.value)))
+    }
+    abstract fun execute(op: Int): Int
+}
+
+abstract class ArithmeticOperator(val precedence: Int) : Operator {
+    abstract fun apply(stack: MutableStack<Operand>)
+}
+
+class LeftParenthesis : Parenthesis
+
+class RightParenthesis : Parenthesis
+
+interface Parenthesis : Operator
+
+interface Operator : Element
+
+class Number(override val value: Int) : Operand
+
+class Variable(private val name: String) : Operand {
+    override val value: Int
+        get() = Calculator.variables[name] ?: throw UnknownVariableException()
+}
+
+interface Operand : Element {
+    val value: Int
+}
+
+interface Element
 
 class InvalidExpressionException : Exception()
 class InvalidIdentifierException : Exception()
 class InvalidAssignmentException : Exception()
 class UnknownVariableException : Exception()
+
+class MutableStack<E> {
+    private val elements = mutableListOf<E>()
+
+    fun push(element: E) = elements.add(element)
+    fun peek(): E = elements.last()
+    fun pop(): E = elements.removeAt(elements.size - 1)
+    fun clear() = elements.clear()
+    fun isEmpty() = elements.isEmpty()
+}
