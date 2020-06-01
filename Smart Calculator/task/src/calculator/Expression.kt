@@ -11,180 +11,178 @@ import java.util.Deque
  * only public method is evaluate(), which returns the result of the expression or throws an exception.
  */
 class Expression(tokens: List<Token>) {
-    val elements = parse(tokens)
+    private val elements = parse(tokens)
     private var parenthesisCount = 0
 
     private fun parse(tokens: List<Token>): List<Element> {
-        val tokenIterator = tokens.listIterator()
         val elements = mutableListOf<Element>()
-        var lastToken: Token? = null
-        while (tokenIterator.hasNext()) {
-            val token = tokenIterator.next()
-            val thisElement = when (token) {
-                is Token.Integer -> Number(token.value)
-                is Token.Identifier -> Variable(token.name)
-                is Token.Symbol -> symbol(token.char, lastToken)
-            }
-            elements.add(thisElement)
-            lastToken = token
+        var previous: Token? = null
+        tokens.forEach {
+            elements.add(when (it) {
+                is Token.Integer -> Number(it.value)
+                is Token.Identifier -> Variable(it.name)
+                is Token.Symbol -> symbol(it.char, previous)
+            })
+            previous = it
         }
         if (parenthesisCount != 0) throw InvalidExpressionException()
         return elements
     }
 
-    private fun symbol(symbol: Char, lastToken: Token?): Element {
-        val isBinary = lastToken is Token.Integer || lastToken is Token.Identifier ||
-                lastToken is Token.Symbol && lastToken.char == ')'
+    private fun symbol(symbol: Char, previous: Token?): Element {
+        val isBinary = previous is Token.Integer || previous is Token.Identifier ||
+                previous is Token.Symbol && previous.char == ')'
         return when (symbol) {
             '+' -> if (isBinary) BinaryPlusOperator() else UnaryPlusOperator()
             '-' -> if (isBinary) BinaryMinusOperator() else UnaryMinusOperator()
             '*' -> if (isBinary) TimesOperator() else throw InvalidExpressionException()
             '/' -> if (isBinary) DivOperator() else throw InvalidExpressionException()
             '^' -> if (isBinary) PowerOperator() else throw InvalidExpressionException()
-            '(' -> { parenthesisCount++; LeftParenthesis() }
-            ')' -> { parenthesisCount--; RightParenthesis() }
+            '(' -> {
+                parenthesisCount++; LeftParenthesis()
+            }
+            ')' -> {
+                parenthesisCount--; RightParenthesis()
+            }
             else -> throw InvalidExpressionException()
         }
     }
 
-    fun evaluate(): BigInteger {
-        val postfixExpression = PostfixExpression(this)
-        return postfixExpression.evaluate()
-    }
-}
+    fun evaluate() = PostfixExpression(elements).evaluate()
 
-class PostfixExpression(infixExpression: Expression) {
-    private val postfixElements = ArrayDeque<Element>()
-    private val operatorStack = ArrayDeque<Operator>()
+    class PostfixExpression(infixElements: List<Element>) {
+        private val operatorStack = ArrayDeque<Operator>()
+        private val postfixElements = scanInfix(infixElements)
 
-    init {
-        scanInfix(infixExpression)
-        emptyOperatorStack()
-    }
-
-    private fun scanInfix(infixExpression: Expression) {
-        infixExpression.elements.forEach {
-            when (it) {
-                is Operand -> postfixElements.add(it)
-                is ArithmeticOperator -> processOperator(it)
-                is LeftParenthesis -> operatorStack.push(it)
-                is RightParenthesis -> {
-                    while (operatorStack.peek() !is LeftParenthesis) {
-                        postfixElements.add(operatorStack.pop())
-                    }
-                    operatorStack.pop()
-                }
-            }
-        }
-    }
-
-    private fun processOperator(op: ArithmeticOperator) {
-        loop@ while (!operatorStack.isEmpty()) {
-            when (val topOfStack = operatorStack.peek()) {
-                is LeftParenthesis -> break@loop
-                is ArithmeticOperator -> {
-                    if (op.precedence <= topOfStack.precedence) {
-                        postfixElements.add(operatorStack.pop())
-                    } else {
-                        break@loop
+        private fun scanInfix(infixElements: List<Element>): Deque<Element> {
+            val postfix = ArrayDeque<Element>()
+            infixElements.forEach {
+                when (it) {
+                    is Operand -> postfix.add(it)
+                    is ArithmeticOperator -> processOperator(postfix, it)
+                    is LeftParenthesis -> operatorStack.push(it)
+                    is RightParenthesis -> {
+                        while (operatorStack.peek() !is LeftParenthesis) {
+                            postfix.add(operatorStack.pop())
+                        }
+                        operatorStack.pop()
                     }
                 }
             }
+            addRemainingOperators(postfix)
+            return postfix
         }
-        operatorStack.push(op)
-    }
 
-    private fun emptyOperatorStack() {
-        while (!operatorStack.isEmpty()) {
-            if (operatorStack.peek() is Parenthesis) {
-                throw InvalidExpressionException()
-            } else {
-                postfixElements.add(operatorStack.pop())
+        private fun processOperator(postfix: Deque<Element>, op: ArithmeticOperator) {
+            loop@ while (!operatorStack.isEmpty()) {
+                when (val topOfStack = operatorStack.peek()) {
+                    is LeftParenthesis -> break@loop
+                    is ArithmeticOperator -> {
+                        if (op.precedence <= topOfStack.precedence) {
+                            postfix.add(operatorStack.pop())
+                        } else {
+                            break@loop
+                        }
+                    }
+                }
+            }
+            operatorStack.push(op)
+        }
+
+        private fun addRemainingOperators(postfix: Deque<Element>) {
+            while (!operatorStack.isEmpty()) {
+                if (operatorStack.peek() is Parenthesis) {
+                    throw InvalidExpressionException()
+                } else {
+                    postfix.add(operatorStack.pop())
+                }
             }
         }
-    }
 
-    fun evaluate(): BigInteger {
-        val operandStack = ArrayDeque<Operand>()
-        postfixElements.forEach {
-            when (it) {
-                is Operand -> operandStack.push(it)
-                is ArithmeticOperator -> it.apply(operandStack)
+        fun evaluate(): BigInteger {
+            val operandStack = ArrayDeque<Operand>()
+            postfixElements.forEach {
+                when (it) {
+                    is Operand -> operandStack.push(it)
+                    is ArithmeticOperator -> it.apply(operandStack)
+                }
             }
+            return operandStack.pop().value
         }
-        return operandStack.pop().value
     }
-}
 
-class BinaryPlusOperator : BinaryOperator(precedence = 1) {
-    override fun execute(op1: BigInteger, op2: BigInteger) = op1 + op2
-}
+    class Number(override val value: BigInteger) : Operand
 
-class BinaryMinusOperator : BinaryOperator(precedence = 1) {
-    override fun execute(op1: BigInteger, op2: BigInteger) = op1 - op2
-}
-
-class TimesOperator : BinaryOperator(precedence = 2) {
-    override fun execute(op1: BigInteger, op2: BigInteger) = op1 * op2
-}
-
-class DivOperator : BinaryOperator(precedence = 2) {
-    override fun execute(op1: BigInteger, op2: BigInteger) = op1 / op2
-}
-
-class PowerOperator : BinaryOperator(precedence = 3) {
-    override fun execute(op1: BigInteger, op2: BigInteger): BigInteger = op1.pow(op2.toInt())
-}
-
-abstract class BinaryOperator(precedence: Int) : ArithmeticOperator(precedence) {
-    override fun apply(stack: Deque<Operand>) {
-        val op2 = stack.pop()
-        val op1 = stack.pop()
-        stack.push(Number(execute(op1.value, op2.value)))
+    class Variable(private val name: String) : Operand {
+        override val value: BigInteger
+            get() = Calculator.variables[name] ?: throw UnknownVariableException()
     }
-    abstract fun execute(op1: BigInteger, op2: BigInteger): BigInteger
-}
 
-class UnaryPlusOperator : UnaryOperator(precedence = 3) {
-    override fun execute(op: BigInteger) = op
-}
-
-class UnaryMinusOperator : UnaryOperator(precedence = 3) {
-    override fun execute(op: BigInteger) = -op
-}
-
-abstract class UnaryOperator(precedence: Int) : ArithmeticOperator(precedence) {
-    override fun apply(stack: Deque<Operand>) {
-        val op = stack.pop()
-        stack.push(Number(execute(op.value)))
+    class BinaryPlusOperator : BinaryOperator(precedence = 1) {
+        override fun execute(op1: BigInteger, op2: BigInteger) = op1 + op2
     }
-    abstract fun execute(op: BigInteger): BigInteger
+
+    class BinaryMinusOperator : BinaryOperator(precedence = 1) {
+        override fun execute(op1: BigInteger, op2: BigInteger) = op1 - op2
+    }
+
+    class TimesOperator : BinaryOperator(precedence = 2) {
+        override fun execute(op1: BigInteger, op2: BigInteger) = op1 * op2
+    }
+
+    class DivOperator : BinaryOperator(precedence = 2) {
+        override fun execute(op1: BigInteger, op2: BigInteger) = op1 / op2
+    }
+
+    class PowerOperator : BinaryOperator(precedence = 3) {
+        override fun execute(op1: BigInteger, op2: BigInteger): BigInteger = op1.pow(op2.toInt())
+    }
+
+    class UnaryPlusOperator : UnaryOperator(precedence = 4) {
+        override fun execute(op: BigInteger) = op
+    }
+
+    class UnaryMinusOperator : UnaryOperator(precedence = 4) {
+        override fun execute(op: BigInteger) = -op
+    }
+
+    class LeftParenthesis : Parenthesis
+
+    class RightParenthesis : Parenthesis
+
+    abstract class BinaryOperator(precedence: Int) : ArithmeticOperator(precedence) {
+        override fun apply(stack: Deque<Operand>) {
+            val op2 = stack.pop()
+            val op1 = stack.pop()
+            stack.push(Number(execute(op1.value, op2.value)))
+        }
+
+        abstract fun execute(op1: BigInteger, op2: BigInteger): BigInteger
+    }
+
+    abstract class UnaryOperator(precedence: Int) : ArithmeticOperator(precedence) {
+        override fun apply(stack: Deque<Operand>) {
+            val op = stack.pop()
+            stack.push(Number(execute(op.value)))
+        }
+
+        abstract fun execute(op: BigInteger): BigInteger
+    }
+
+    abstract class ArithmeticOperator(val precedence: Int) : Operator {
+        abstract fun apply(stack: Deque<Operand>)
+    }
+
+    interface Operand : Element {
+        val value: BigInteger
+    }
+
+    interface Parenthesis : Operator
+
+    interface Operator : Element
+
+    interface Element
 }
-
-abstract class ArithmeticOperator(val precedence: Int) : Operator {
-    abstract fun apply(stack: Deque<Operand>)
-}
-
-class LeftParenthesis : Parenthesis
-
-class RightParenthesis : Parenthesis
-
-interface Parenthesis : Operator
-
-interface Operator : Element
-
-class Number(override val value: BigInteger) : Operand
-
-class Variable(private val name: String) : Operand {
-    override val value: BigInteger
-        get() = Calculator.variables[name] ?: throw UnknownVariableException()
-}
-
-interface Operand : Element {
-    val value: BigInteger
-}
-
-interface Element
 
 class InvalidExpressionException : Exception()
 class InvalidIdentifierException : Exception()
