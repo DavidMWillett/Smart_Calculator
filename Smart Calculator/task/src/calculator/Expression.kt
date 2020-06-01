@@ -1,6 +1,8 @@
 package calculator
 
 import java.math.BigInteger
+import java.util.ArrayDeque
+import java.util.Deque
 
 /**
  * Represents an arithmetic expression.
@@ -53,7 +55,7 @@ class Expression(tokens: List<Token>) {
 
 class PostfixExpression(infixExpression: Expression) {
     private val postfixElements = mutableListOf<Element>()
-    private val operatorStack = MutableStack<Operator>()
+    private val operatorStack = ArrayDeque<Operator>()
 
     init {
         scanInfix(infixExpression)
@@ -103,7 +105,7 @@ class PostfixExpression(infixExpression: Expression) {
     }
 
     fun evaluate(): BigInteger {
-        val operandStack = MutableStack<Operand>()
+        val operandStack = ArrayDeque<Operand>()
         postfixElements.forEach {
             when (it) {
                 is Operand -> operandStack.push(it)
@@ -135,7 +137,7 @@ class PowerOperator : BinaryOperator(precedence = 3) {
 }
 
 abstract class BinaryOperator(precedence: Int) : ArithmeticOperator(precedence) {
-    override fun apply(stack: MutableStack<Operand>) {
+    override fun apply(stack: Deque<Operand>) {
         val op2 = stack.pop()
         val op1 = stack.pop()
         stack.push(Number(execute(op1.value, op2.value)))
@@ -152,7 +154,7 @@ class UnaryMinusOperator : UnaryOperator(precedence = 3) {
 }
 
 abstract class UnaryOperator(precedence: Int) : ArithmeticOperator(precedence) {
-    override fun apply(stack: MutableStack<Operand>) {
+    override fun apply(stack: Deque<Operand>) {
         val op = stack.pop()
         stack.push(Number(execute(op.value)))
     }
@@ -160,7 +162,7 @@ abstract class UnaryOperator(precedence: Int) : ArithmeticOperator(precedence) {
 }
 
 abstract class ArithmeticOperator(val precedence: Int) : Operator {
-    abstract fun apply(stack: MutableStack<Operand>)
+    abstract fun apply(stack: Deque<Operand>)
 }
 
 class LeftParenthesis : Parenthesis
@@ -188,12 +190,3 @@ class InvalidExpressionException : Exception()
 class InvalidIdentifierException : Exception()
 class InvalidAssignmentException : Exception()
 class UnknownVariableException : Exception()
-
-class MutableStack<E> {
-    private val elements = mutableListOf<E>()
-
-    fun push(element: E) = elements.add(element)
-    fun peek(): E = elements.last()
-    fun pop(): E = elements.removeAt(elements.size - 1)
-    fun isEmpty() = elements.isEmpty()
-}
