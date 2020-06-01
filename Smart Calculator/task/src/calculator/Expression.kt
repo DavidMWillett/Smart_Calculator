@@ -1,6 +1,6 @@
 package calculator
 
-import kotlin.math.pow
+import java.math.BigInteger
 
 /**
  * Represents an arithmetic expression.
@@ -45,7 +45,7 @@ class Expression(tokens: List<Token>) {
         }
     }
 
-    fun evaluate(): Int {
+    fun evaluate(): BigInteger {
         val postfixExpression = PostfixExpression(this)
         return postfixExpression.evaluate()
     }
@@ -102,7 +102,7 @@ class PostfixExpression(infixExpression: Expression) {
         }
     }
 
-    fun evaluate(): Int {
+    fun evaluate(): BigInteger {
         val operandStack = MutableStack<Operand>()
         postfixElements.forEach {
             when (it) {
@@ -115,23 +115,23 @@ class PostfixExpression(infixExpression: Expression) {
 }
 
 class BinaryPlusOperator : BinaryOperator(precedence = 1) {
-    override fun execute(op1: Int, op2: Int) = op1 + op2
+    override fun execute(op1: BigInteger, op2: BigInteger) = op1 + op2
 }
 
 class BinaryMinusOperator : BinaryOperator(precedence = 1) {
-    override fun execute(op1: Int, op2: Int) = op1 - op2
+    override fun execute(op1: BigInteger, op2: BigInteger) = op1 - op2
 }
 
 class TimesOperator : BinaryOperator(precedence = 2) {
-    override fun execute(op1: Int, op2: Int) = op1 * op2
+    override fun execute(op1: BigInteger, op2: BigInteger) = op1 * op2
 }
 
 class DivOperator : BinaryOperator(precedence = 2) {
-    override fun execute(op1: Int, op2: Int) = op1 / op2
+    override fun execute(op1: BigInteger, op2: BigInteger) = op1 / op2
 }
 
 class PowerOperator : BinaryOperator(precedence = 3) {
-    override fun execute(op1: Int, op2: Int) = op1.toDouble().pow(op2).toInt()
+    override fun execute(op1: BigInteger, op2: BigInteger): BigInteger = op1.pow(op2.toInt())
 }
 
 abstract class BinaryOperator(precedence: Int) : ArithmeticOperator(precedence) {
@@ -140,15 +140,15 @@ abstract class BinaryOperator(precedence: Int) : ArithmeticOperator(precedence) 
         val op1 = stack.pop()
         stack.push(Number(execute(op1.value, op2.value)))
     }
-    abstract fun execute(op1: Int, op2: Int): Int
+    abstract fun execute(op1: BigInteger, op2: BigInteger): BigInteger
 }
 
 class UnaryPlusOperator : UnaryOperator(precedence = 3) {
-    override fun execute(op: Int) = op
+    override fun execute(op: BigInteger) = op
 }
 
 class UnaryMinusOperator : UnaryOperator(precedence = 3) {
-    override fun execute(op: Int) = -op
+    override fun execute(op: BigInteger) = -op
 }
 
 abstract class UnaryOperator(precedence: Int) : ArithmeticOperator(precedence) {
@@ -156,7 +156,7 @@ abstract class UnaryOperator(precedence: Int) : ArithmeticOperator(precedence) {
         val op = stack.pop()
         stack.push(Number(execute(op.value)))
     }
-    abstract fun execute(op: Int): Int
+    abstract fun execute(op: BigInteger): BigInteger
 }
 
 abstract class ArithmeticOperator(val precedence: Int) : Operator {
@@ -171,15 +171,15 @@ interface Parenthesis : Operator
 
 interface Operator : Element
 
-class Number(override val value: Int) : Operand
+class Number(override val value: BigInteger) : Operand
 
 class Variable(private val name: String) : Operand {
-    override val value: Int
+    override val value: BigInteger
         get() = Calculator.variables[name] ?: throw UnknownVariableException()
 }
 
 interface Operand : Element {
-    val value: Int
+    val value: BigInteger
 }
 
 interface Element

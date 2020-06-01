@@ -1,5 +1,7 @@
 package calculator
 
+import java.math.BigInteger
+
 object Tokenizer {
     /**
      * Converts input [text] into a list of tokens representing the integers, identifiers (words) and symbols.
@@ -21,7 +23,7 @@ object Tokenizer {
         return tokens
     }
 
-    private fun scanInteger(iterator: ListIterator<Char>, firstDigit: Char): Int {
+    private fun scanInteger(iterator: ListIterator<Char>, firstDigit: Char): BigInteger {
         var result = firstDigit.toString()
         while (iterator.hasNext()) {
             val character = iterator.next()
@@ -32,7 +34,7 @@ object Tokenizer {
                 break
             }
         }
-        return result.toInt()
+        return result.toBigInteger()
     }
 
     private fun scanVariable(iterator: ListIterator<Char>, firstLetter: Char): String {
@@ -51,7 +53,7 @@ object Tokenizer {
 }
 
 sealed class Token {
-    class Integer(val value: Int) : Token()
+    class Integer(val value: BigInteger) : Token()
     class Identifier(val name: String) : Token()
     class Symbol(val char: Char) : Token()
 }

@@ -1,9 +1,11 @@
 package calculator
 
+import java.math.BigInteger
+
 fun String.isCommand() = this.first() == '/'
 
 object Calculator {
-    val variables = mutableMapOf<String, Int>()
+    val variables = mutableMapOf<String, BigInteger>()
 
     private const val HELP: String = """
         This program evaluates expressions containing integers and the plus, minus, times, divide and power operators.
@@ -43,7 +45,7 @@ class Statement(text: String) {
      * Executes the statement, returning an integer if the statement is an expression, otherwise null.
      * Throws the appropriate exception if an error is detected.
      */
-    fun execute(): Int? {
+    fun execute(): BigInteger? {
         return if (tokens.any { it is Token.Symbol && it.char == '=' }) {
             val assignment = Assignment(tokens)
             assignment.execute()
