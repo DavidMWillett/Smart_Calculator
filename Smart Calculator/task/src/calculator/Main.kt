@@ -10,14 +10,19 @@ fun main() {
         val input = readLine()!!
         if (input.isEmpty()) continue
         if (input.isCommand()) {
-            finished = Calculator.parseCommand(input)
+            finished = Calculator.executeCommand(input)
             continue
         }
-        Calculator.parseStatement(input)
+        Calculator.executeStatement(input)
     } while (!finished)
     println("Bye!")
 }
 
+/**
+ * The one and only calculator object.
+ *
+ * Represents the calculator. Provides functions for executing commands and statements.
+ */
 object Calculator {
     val variables = mutableMapOf<String, BigInteger>()
 
@@ -27,7 +32,7 @@ object Calculator {
         provides for the assignment and use of variables.
     """
 
-    fun parseCommand(command: String): Boolean {
+    fun executeCommand(command: String): Boolean {
         return when (command) {
             "/exit" -> true
             "/help" -> {
@@ -39,7 +44,7 @@ object Calculator {
         }
     }
 
-    fun parseStatement(input: String) {
+    fun executeStatement(input: String) {
         try {
             val statement = Statement(input)
             val result = statement.execute()
@@ -56,7 +61,7 @@ object Calculator {
     }
 
     class Statement(text: String) {
-        private val tokens = Tokenizer.scan(text)
+        private val tokens = TokenList(text).tokens
 
         /**
          * Executes this statement, returning an integer if the statement is an expression, otherwise null.
@@ -78,7 +83,7 @@ object Calculator {
 
         /**
          * Executes this assignment. Throws an exception if the token list specified in the constructor was not of
-         * the form identifier = number, where whitespace is optional.
+         * the form identifier = number, where whitespace is optional. A bit of a kludge really.
          */
         fun execute() {
             if (tokens.size != 3) throw InvalidAssignmentException()
@@ -93,3 +98,8 @@ object Calculator {
         }
     }
 }
+
+class InvalidExpressionException : Exception()
+class InvalidIdentifierException : Exception()
+class InvalidAssignmentException : Exception()
+class UnknownVariableException : Exception()

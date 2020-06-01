@@ -2,12 +2,16 @@ package calculator
 
 import java.math.BigInteger
 
-object Tokenizer {
-    /**
-     * Converts input [text] into a list of tokens representing the integers, identifiers (words) and symbols.
-     * No semantic checking is performed here.
-     */
-    fun scan(text: String): List<Token> {
+/**
+ * A list of tokens (integers, identifiers and symbols).
+ *
+ * Represents a list of tokens derived from the text supplied to the constructor. No semantic checking is performed
+ * here; the [tokens] property is simply a representation of the content of the text (minus whitespace).
+ */
+class TokenList(text: String) {
+    val tokens = scan(text)
+
+    private fun scan(text: String): List<Token> {
         val iterator = text.toList().listIterator()
         val tokens = mutableListOf<Token>()
         while (iterator.hasNext()) {

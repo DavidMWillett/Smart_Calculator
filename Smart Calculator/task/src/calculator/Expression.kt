@@ -50,6 +50,12 @@ class Expression(tokens: List<Token>) {
 
     fun evaluate() = PostfixExpression(elements).evaluate()
 
+    /**
+     * An arithmetic expression in postfix form.
+     *
+     * Nested class representing a postfix arithmetic expression. Instantiated and initialized by the outer
+     * Expression object in order to evaluate the expression represented by that Expression object.
+     */
     class PostfixExpression(infixElements: List<Element>) {
         private val operatorStack = ArrayDeque<Operator>()
         private val postfixElements = scanInfix(infixElements)
@@ -110,6 +116,9 @@ class Expression(tokens: List<Token>) {
             return operandStack.pop().value
         }
     }
+
+    // Subclasses of Element representing all the different types of Element than can be part of the list
+    // representing an infix or postfix arithmetic expression.
 
     class Number(override val value: BigInteger) : Operand
 
@@ -183,8 +192,3 @@ class Expression(tokens: List<Token>) {
 
     interface Element
 }
-
-class InvalidExpressionException : Exception()
-class InvalidIdentifierException : Exception()
-class InvalidAssignmentException : Exception()
-class UnknownVariableException : Exception()
