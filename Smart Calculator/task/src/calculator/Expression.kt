@@ -54,7 +54,7 @@ class Expression(tokens: List<Token>) {
 }
 
 class PostfixExpression(infixExpression: Expression) {
-    private val postfixElements = mutableListOf<Element>()
+    private val postfixElements = ArrayDeque<Element>()
     private val operatorStack = ArrayDeque<Operator>()
 
     init {
@@ -65,12 +65,12 @@ class PostfixExpression(infixExpression: Expression) {
     private fun scanInfix(infixExpression: Expression) {
         infixExpression.elements.forEach {
             when (it) {
-                is Operand -> postfixElements += it
+                is Operand -> postfixElements.add(it)
                 is ArithmeticOperator -> processOperator(it)
                 is LeftParenthesis -> operatorStack.push(it)
                 is RightParenthesis -> {
                     while (operatorStack.peek() !is LeftParenthesis) {
-                        postfixElements += operatorStack.pop()
+                        postfixElements.add(operatorStack.pop())
                     }
                     operatorStack.pop()
                 }
@@ -84,7 +84,7 @@ class PostfixExpression(infixExpression: Expression) {
                 is LeftParenthesis -> break@loop
                 is ArithmeticOperator -> {
                     if (op.precedence <= topOfStack.precedence) {
-                        postfixElements += operatorStack.pop()
+                        postfixElements.add(operatorStack.pop())
                     } else {
                         break@loop
                     }
@@ -99,7 +99,7 @@ class PostfixExpression(infixExpression: Expression) {
             if (operatorStack.peek() is Parenthesis) {
                 throw InvalidExpressionException()
             } else {
-                postfixElements += operatorStack.pop()
+                postfixElements.add(operatorStack.pop())
             }
         }
     }
